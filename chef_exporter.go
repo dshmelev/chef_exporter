@@ -15,10 +15,6 @@ import (
 	"github.com/prometheus/common/version"
 )
 
-var CHEF_CLIENT_NAME = os.Getenv("CHEF_CLIENT_NAME")
-var CHEF_CLIENT_KEY = os.Getenv("CHEF_CLIENT_KEY")
-var CHEF_SERVER_URL = os.Getenv("CHEF_SERVER_URL")
-
 const (
 	namespace = "chef" // For Prometheus metrics.
 )
@@ -45,13 +41,19 @@ func newNodeMetric(metricName string, docString string, constLabels prometheus.L
 // the prometheus metrics package.
 type Exporter struct {
 	mutex                       sync.RWMutex
+	chefServerUrl               string
+	chefClientName              string
+	chefClientKey               string
 	up                          prometheus.Gauge
 	totalScrapes, ParseFailures prometheus.Counter
 	nodeMetrics                 map[int]*prometheus.GaugeVec
 }
 
-func NewExporter() (*Exporter, error) {
+func NewExporter(uri string, chefClientName string, chefClientKey string) (*Exporter, error) {
 	return &Exporter{
+		chefServerUrl:  uri,
+		chefClientName: chefClientName,
+		chefClientKey:  chefClientKey,
 		up: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: namespace,
 			Name:      "up",
@@ -107,17 +109,17 @@ func (e *Exporter) resetMetrics() {
 
 func (e *Exporter) scrape() {
 	e.totalScrapes.Inc()
-	key, err := ioutil.ReadFile(CHEF_CLIENT_KEY)
+	key, err := ioutil.ReadFile(e.chefClientKey)
 	if err != nil {
 		fmt.Println("Couldn't read chef client key", err)
 	}
 
 	// build a client
 	client, err := chef.NewClient(&chef.Config{
-		Name: CHEF_CLIENT_NAME,
+		Name: e.chefClientName,
 		Key:  string(key),
 		// goiardi is on port 4545 by default. chef-zero is 8889
-		BaseURL: CHEF_SERVER_URL,
+		BaseURL: e.chefServerUrl,
 	})
 	if err != nil {
 		fmt.Println("Issue setting up chef client:", err)
@@ -156,9 +158,12 @@ func (e *Exporter) exportAttributes(metrics map[int]*prometheus.GaugeVec, value 
 
 func main() {
 	var (
-		listenAddress = flag.String("web.listen-address", ":9101", "Address to listen on for web interface and telemetry.")
-		metricsPath   = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
-		showVersion   = flag.Bool("version", false, "Print version information.")
+		listenAddress  = flag.String("web.listen-address", ":9101", "Address to listen on for web interface and telemetry.")
+		metricsPath    = flag.String("web.telemetry-path", "/metrics", "Path under which to expose metrics.")
+		chefServerUrl  = flag.String("chef.url", "localhost:8080", "Chef API url.")
+		chefClientName = flag.String("chef.client-name", "chef_exporter", "Chef client name.")
+		chefClientKey  = flag.String("chef.client-keyfile", "client.pem", "Chef client keyfile.")
+		showVersion    = flag.Bool("version", false, "Print version information.")
 	)
 	flag.Parse()
 	if *showVersion {
@@ -168,7 +173,7 @@ func main() {
 
 	log.Println("Starting chef_exporter", version.Info())
 	log.Println("Build context", version.BuildContext())
-	exporter, err := NewExporter()
+	exporter, err := NewExporter(*chefServerUrl, *chefClientName, *chefClientKey)
 	if err != nil {
 		log.Fatal(err)
 	}
