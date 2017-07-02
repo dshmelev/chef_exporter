@@ -18,8 +18,7 @@ VERSION ?= $(shell git describe --dirty)
 
 PREFIX                  ?= $(shell pwd)
 BIN_DIR                 ?= $(shell pwd)
-DOCKER_IMAGE_NAME       ?= chef-exporter
-DOCKER_IMAGE_TAG        ?= $(subst /,-,$(shell git rev-parse --abbrev-ref HEAD))
+DOCKER_IMAGE_NAME       ?= avikez/chef-exporter
 
 all: format build test
 
@@ -49,7 +48,12 @@ tarball: promu
 
 docker:
 	@echo ">> building docker image"
-	@docker build -t "$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_TAG)" .
+	@docker build -t "$(DOCKER_IMAGE_NAME):$(VERSION)" .
+
+docker-release: build docker
+	@echo ">> pushing release to $(DOCKER_IMAGE_NAME):$(VERSION)"
+	@docker login -u $(DOCKER_USER) -p $(DOCKER_PASS)
+	@docker push "$(DOCKER_IMAGE_NAME):$(VERSION)"
 
 promu:
 	@GOOS=$(shell uname -s | tr A-Z a-z) \
