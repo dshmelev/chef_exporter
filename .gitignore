@@ -1,0 +1,4 @@
+.build
+bin/chef_exporter*
+chef_exporter
+*.tar.gz
